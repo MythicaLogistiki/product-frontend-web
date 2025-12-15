@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Database, Shield, User, LogOut } from "lucide-react";
+import { Search, Database, Shield, User, LogOut, Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { AdminOnly } from "@/components/guards/role-guard";
 import { SupportWidget } from "@/components/support-widget";
+import { PlaidLinkButton } from "@/components/plaid-link";
 import { api } from "@/lib/api";
 
 type Role = "admin" | "standard";
@@ -122,6 +123,29 @@ export default function DashboardPage() {
             Welcome, {user.email}
           </p>
         </div>
+
+        {/* Bank Connection Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Landmark className="h-5 w-5 text-muted-foreground" />
+              Bank Connection
+            </CardTitle>
+            <CardDescription>
+              Connect your bank account to sync transactions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PlaidLinkButton
+              onSuccess={(itemId, institutionName) => {
+                console.log("Connected:", itemId, institutionName);
+              }}
+              onError={(error) => {
+                console.error("Plaid error:", error);
+              }}
+            />
+          </CardContent>
+        </Card>
 
         {/* Search Card */}
         <Card className="mb-6">
