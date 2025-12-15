@@ -1,4 +1,5 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const AUTH_BASE_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:8001";
 
 export interface TokenResponse {
   access_token: string;
@@ -12,10 +13,12 @@ export interface ApiError {
 
 class ApiClient {
   private baseUrl: string;
+  private authUrl: string;
   private token: string | null = null;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, authUrl: string) {
     this.baseUrl = baseUrl;
+    this.authUrl = authUrl;
   }
 
   setToken(token: string) {
@@ -74,7 +77,7 @@ class ApiClient {
     formData.append("username", username);
     formData.append("password", password);
 
-    const response = await fetch(`${this.baseUrl}/token`, {
+    const response = await fetch(`${this.authUrl}/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -102,6 +105,26 @@ class ApiClient {
     return this.request("/health");
   }
 
+  // Plaid API methods
+  async createPlaidLinkToken(): Promise<{ link_token: string }> {
+    return this.request("/api/v1/plaid/link-token", { method: "POST" });
+  }
+
+  async connectPlaidAccount(
+    publicToken: string,
+    institutionId?: string,
+    institutionName?: string
+  ): Promise<{ item_id: string; institution_name: string | null }> {
+    return this.request("/api/v1/plaid/connect", {
+      method: "POST",
+      body: JSON.stringify({
+        public_token: publicToken,
+        institution_id: institutionId,
+        institution_name: institutionName,
+      }),
+    });
+  }
+
   // Decode JWT to get user info (client-side only, not verified)
   decodeToken(): { sub: string; tenant_id: string; role: string } | null {
     const token = this.getToken();
@@ -121,4 +144,4 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient(API_BASE_URL);
+export const api = new ApiClient(API_BASE_URL, AUTH_BASE_URL);

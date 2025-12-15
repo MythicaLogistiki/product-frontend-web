@@ -45,3 +45,4 @@ next-env.d.ts
 # Python (if any scripts)
 venv/
 __pycache__/
+
