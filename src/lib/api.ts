@@ -5,6 +5,12 @@ import type {
   PlaidItem,
   SyncResult,
 } from "./types";
+import type {
+  Tenant,
+  TenantListResponse,
+  CreateTenantRequest,
+  CreateTenantResponse,
+} from "./admin-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const AUTH_BASE_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:8001";
@@ -23,12 +29,14 @@ class ApiClient {
   private baseUrl: string;
   private authUrl: string;
   private token: string | null = null;
+  private tenantSlug: string | null = null;
 
   constructor(baseUrl: string, authUrl: string) {
     this.baseUrl = baseUrl;
     this.authUrl = authUrl;
   }
 
+  // Token management
   setToken(token: string) {
     this.token = token;
     if (typeof window !== "undefined") {
@@ -51,6 +59,43 @@ class ApiClient {
     }
   }
 
+  // Tenant slug management for multi-tenant routing
+  setTenantSlug(slug: string | null) {
+    this.tenantSlug = slug;
+    if (typeof window !== "undefined") {
+      if (slug) {
+        localStorage.setItem("tenant_slug", slug);
+      } else {
+        localStorage.removeItem("tenant_slug");
+      }
+    }
+  }
+
+  getTenantSlug(): string | null {
+    if (this.tenantSlug) return this.tenantSlug;
+    if (typeof window !== "undefined") {
+      // First check cookie (set by middleware)
+      const cookieSlug = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("tenant-slug="))
+        ?.split("=")[1];
+      if (cookieSlug) {
+        this.tenantSlug = cookieSlug;
+        return cookieSlug;
+      }
+      // Fallback to localStorage
+      this.tenantSlug = localStorage.getItem("tenant_slug");
+    }
+    return this.tenantSlug;
+  }
+
+  clearTenantSlug() {
+    this.tenantSlug = null;
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("tenant_slug");
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -63,6 +108,12 @@ class ApiClient {
     const token = this.getToken();
     if (token) {
       (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+    }
+
+    // Add tenant slug header for multi-tenant routing
+    const tenantSlug = this.getTenantSlug();
+    if (tenantSlug) {
+      (headers as Record<string, string>)["X-Tenant-Slug"] = tenantSlug;
     }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -175,6 +226,80 @@ class ApiClient {
     } catch {
       return null;
     }
+  }
+
+  // ============== Admin API Methods ==============
+
+  async adminGetTenants(
+    page: number = 1,
+    pageSize: number = 20,
+    search?: string
+  ): Promise<TenantListResponse> {
+    const params = new URLSearchParams();
+    params.set("page", page.toString());
+    params.set("page_size", pageSize.toString());
+    if (search) params.set("search", search);
+
+    return this.request(`/api/v1/admin/tenants?${params.toString()}`);
+  }
+
+  async adminCreateTenant(data: CreateTenantRequest): Promise<CreateTenantResponse> {
+    return this.request("/api/v1/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminGetTenant(tenantId: string): Promise<Tenant> {
+    return this.request(`/api/v1/admin/tenants/${tenantId}`);
+  }
+
+  async adminUpdateTenant(
+    tenantId: string,
+    data: Partial<Pick<Tenant, "name" | "subscription_tier" | "is_active">>
+  ): Promise<Tenant> {
+    return this.request(`/api/v1/admin/tenants/${tenantId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminDeleteTenant(tenantId: string): Promise<{ status: string }> {
+    return this.request(`/api/v1/admin/tenants/${tenantId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ============== Support API Methods ==============
+
+  async supportStartImpersonation(tenantId: string): Promise<{
+    session_id: string;
+    tenant_id: string;
+    tenant_slug: string;
+    expires_at: string;
+  }> {
+    return this.request(`/api/v1/support/impersonate/${tenantId}`, {
+      method: "POST",
+    });
+  }
+
+  async supportEndImpersonation(sessionId: string): Promise<{ status: string }> {
+    return this.request(`/api/v1/support/impersonate/${sessionId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async supportGetActiveSessions(): Promise<{
+    sessions: Array<{
+      session_id: string;
+      tenant_id: string;
+      tenant_name: string;
+      tenant_slug: string;
+      started_at: string;
+      expires_at: string;
+    }>;
+  }> {
+    return this.request("/api/v1/support/sessions");
   }
 }
 

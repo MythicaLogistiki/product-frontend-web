@@ -22,7 +22,16 @@ export default function LoginPage() {
 
     try {
       await api.login(email, password);
-      router.push("/dashboard");
+
+      // Redirect based on user role
+      const tokenData = api.decodeToken();
+      if (tokenData?.role === "platform_admin") {
+        router.push("/admin/orgs");
+      } else if (tokenData?.role === "support_agent") {
+        router.push("/support");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
