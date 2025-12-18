@@ -1,3 +1,11 @@
+import type {
+  Transaction,
+  PaginatedResponse,
+  TransactionFilters,
+  PlaidItem,
+  SyncResult,
+} from "./types";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const AUTH_BASE_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:8001";
 
@@ -123,6 +131,32 @@ class ApiClient {
         institution_name: institutionName,
       }),
     });
+  }
+
+  async getPlaidItems(): Promise<PlaidItem[]> {
+    return this.request("/api/v1/plaid/items");
+  }
+
+  async syncPlaidItem(itemId: string): Promise<SyncResult> {
+    return this.request(`/api/v1/plaid/sync/${itemId}`, {
+      method: "POST",
+    });
+  }
+
+  // Transaction API methods
+  async getTransactions(
+    filters: TransactionFilters = {}
+  ): Promise<PaginatedResponse<Transaction>> {
+    const params = new URLSearchParams();
+    if (filters.start_date) params.set("start_date", filters.start_date);
+    if (filters.end_date) params.set("end_date", filters.end_date);
+    if (filters.page) params.set("page", filters.page.toString());
+    if (filters.page_size) params.set("page_size", filters.page_size.toString());
+
+    const queryString = params.toString();
+    return this.request(
+      `/api/v1/transactions${queryString ? `?${queryString}` : ""}`
+    );
   }
 
   // Decode JWT to get user info (client-side only, not verified)

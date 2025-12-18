@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Database, Shield, User, LogOut, Landmark } from "lucide-react";
+import { Search, Database, Shield, User, LogOut, Landmark, CreditCard } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { AdminOnly } from "@/components/guards/role-guard";
 import { SupportWidget } from "@/components/support-widget";
 import { PlaidLinkButton } from "@/components/plaid-link";
+import { TransactionTable } from "@/components/transactions";
 import { api } from "@/lib/api";
+import type { PlaidItem } from "@/lib/types";
+import { formatDateTime } from "@/lib/format";
 
 type Role = "admin" | "standard";
 
@@ -40,6 +43,20 @@ export default function DashboardPage() {
   const [searchId, setSearchId] = useState("");
   const [record, setRecord] = useState<Awaited<ReturnType<typeof fetchRecord>>>(null);
   const [loading, setLoading] = useState(false);
+  const [plaidItems, setPlaidItems] = useState<PlaidItem[]>([]);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+
+  const fetchPlaidItems = useCallback(async () => {
+    try {
+      const items = await api.getPlaidItems();
+      setPlaidItems(items);
+      if (items.length > 0 && !activeItemId) {
+        setActiveItemId(items[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to fetch Plaid items:", err);
+    }
+  }, [activeItemId]);
 
   useEffect(() => {
     const tokenData = api.decodeToken();
@@ -53,6 +70,12 @@ export default function DashboardPage() {
       role: tokenData.role as Role,
     });
   }, [router]);
+
+  useEffect(() => {
+    if (user) {
+      fetchPlaidItems();
+    }
+  }, [user, fetchPlaidItems]);
 
   const handleSearch = async () => {
     if (!user) return;
@@ -137,12 +160,48 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <PlaidLinkButton
-              onSuccess={(itemId, institutionName) => {
+              onSuccess={async (itemId, institutionName) => {
                 console.log("Connected:", itemId, institutionName);
+                await fetchPlaidItems();
+                setActiveItemId(itemId);
               }}
               onError={(error) => {
                 console.error("Plaid error:", error);
               }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Transactions Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-muted-foreground" />
+              Transactions
+            </CardTitle>
+            <CardDescription>
+              {plaidItems.length > 0 ? (
+                <>
+                  Your recent bank transactions
+                  {plaidItems.find((i) => i.id === activeItemId)?.last_synced_at && (
+                    <span className="ml-2 text-xs">
+                      (Last synced:{" "}
+                      {formatDateTime(
+                        plaidItems.find((i) => i.id === activeItemId)!.last_synced_at!
+                      )}
+                      )
+                    </span>
+                  )}
+                </>
+              ) : (
+                "Connect a bank account to view transactions"
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TransactionTable
+              plaidItemId={activeItemId || undefined}
+              onSyncComplete={fetchPlaidItems}
             />
           </CardContent>
         </Card>
